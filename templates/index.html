@@ -513,8 +513,18 @@
                 mapContainer.classList.remove('hidden');
                 rootNodeId = url;
                 graphData = { nodes: [{ id: rootNodeId, group: 'root' }], links: [] };
-                if (!Graph) init3DGraph();
-                else Graph.graphData(graphData);
+                
+                // We must wait 100ms for the CSS 'hidden' class to disappear so WebGL knows the canvas size!
+                setTimeout(() => {
+                    if (!Graph) {
+                        init3DGraph();
+                    } else {
+                        // Force resize and update
+                        Graph.width(document.getElementById('mapContainer').clientWidth);
+                        Graph.height(350);
+                        Graph.graphData(graphData);
+                    }
+                }, 100);
             }
             
             const status = document.getElementById('statusIndicator');

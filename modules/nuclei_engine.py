@@ -34,40 +34,42 @@ class NucleiEngine:
             subprocess.run(cmd, capture_output=True, text=True, timeout=300)
             
             # Parse the JSON results exported by Nuclei
+            # Parse the JSON results exported by Nuclei
             if os.path.exists(output_file):
                 with open(output_file, "r") as f:
                     for line in f:
                         try:
-                            data = json.loads(line.strip())
+                            parsed = json.loads(line.strip())
                             
-                            # BULLETPROOF PARSING: If Nuclei returns a list, grab the first item
-                            if isinstance(data, list):
-                                if not data: continue
-                                data = data[0]
+                            # Force everything into a list so we can loop safely
+                            items = parsed if isinstance(parsed, list) else [parsed]
+
+                            for data in items:
+                                if not isinstance(data, dict):
+                                    continue
                                 
-                            if not isinstance(data, dict):
-                                continue
+                                info = data.get('info', {})
+                                if not isinstance(info, dict):
+                                    info = {}
+                                
+                                # Extract CVE ID if it exists
+                                cve_id = ""
+                                classification = info.get('classification', {})
+                                if isinstance(classification, dict) and 'cve-id' in classification and classification['cve-id']:
+                                    cve_id = f"[{classification['cve-id'][0]}] "
 
-                            info = data.get('info', {})
-                            
-                            # Extract CVE ID if it exists
-                            cve_id = ""
-                            classification = info.get('classification', {})
-                            if isinstance(classification, dict) and 'cve-id' in classification and classification['cve-id']:
-                                cve_id = f"[{classification['cve-id'][0]}] "
-
-                            poc_payload = data.get('curl-command', 'N/A')
-                            
-                            finding = {
-                                'type': f"NUCLEI: {cve_id}{info.get('name', 'Unknown Vulnerability')}",
-                                'severity': info.get('severity', 'high').upper(),
-                                'url': data.get('matched-at', self.target_url),
-                                'payload': data.get('extracted-results', [''])[0] if data.get('extracted-results') else data.get('matcher-name', 'Template Match'),
-                                'proof_of_concept': poc_payload,
-                                'impact': info.get('description', 'Exploitable CVE identified by Nuclei template engine.'),
-                                'remediation': info.get('remediation', 'Apply the latest vendor patches immediately.')
-                            }
-                            findings.append(finding)
+                                poc_payload = data.get('curl-command', 'N/A')
+                                
+                                finding = {
+                                    'type': f"NUCLEI: {cve_id}{info.get('name', 'Unknown Vulnerability')}",
+                                    'severity': info.get('severity', 'high').upper(),
+                                    'url': data.get('matched-at', self.target_url),
+                                    'payload': data.get('extracted-results', [''])[0] if data.get('extracted-results') else data.get('matcher-name', 'Template Match'),
+                                    'proof_of_concept': poc_payload,
+                                    'impact': info.get('description', 'Exploitable CVE identified by Nuclei template engine.'),
+                                    'remediation': info.get('remediation', 'Apply the latest vendor patches immediately.')
+                                }
+                                findings.append(finding)
                         except json.JSONDecodeError:
                             continue
                 os.remove(output_file) # Cleanup

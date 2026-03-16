@@ -331,21 +331,24 @@ def handle_scan(data):
             nuclei_vulns = []
 
         # Combine ZAP's dynamic findings with Nuclei's CVE template findings
+        # Combine ZAP's dynamic findings with Nuclei's CVE template findings
         raw_vulns = zap_vulns + nuclei_vulns
 
-        # 🔴 INJECT WAF FINDING INTO THE REPORT
-        if detected_waf and detected_waf not in ["None Detected", "Unknown"]:
-            raw_vulns.append({
-                'type': f"Security Control: {detected_waf} Detected",
-                'severity': "INFO",
-                'url': target,
-                'payload': f"Edge Security Signatures matched for {detected_waf}",
-                'proof_of_concept': "N/A",
-                'impact': "The target is actively defended by a Web Application Firewall. This mitigates many automated attacks, blocks malicious payloads, and actively challenges bots.",
-                'remediation': "This is a positive security control. Ensure the WAF is configured in blocking mode with updated rulesets."
-            })
-
         web_log("--- PHASE 3: SMART DEDUPLICATION & THREAT SCORING ---")
+        web_log("[*] Starting Smart Analysis, Deduplication & Verification...")
+        
+        # 🔴 BULLETPROOF FALLBACK: Always define the variable before the try block
+        verified_vulns = raw_vulns 
+        
+        try:
+            # Here is where your deduplication logic happens (e.g., removing duplicates)
+            unique_vulns = {v['type']: v for v in raw_vulns}.values()
+            verified_vulns = list(unique_vulns)
+            web_log(f"✅ Analysis Complete: Condensed {len(raw_vulns)} alerts into {len(verified_vulns)} unique threats.")
+        except Exception as e:
+            web_log(f"⚠️ Deduplication Warning: {str(e)}. Proceeding with raw data.")
+
+        web_log("--- PHASE 3.5: ACTIVE EXPLOIT VERIFICATION ---")
         try:
             exploiter = ExploiterEngine(verified_vulns, auth_header=auth_token, logger_callback=web_log)
             verified_vulns = exploiter.start() 

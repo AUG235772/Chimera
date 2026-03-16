@@ -10,6 +10,8 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <script src="https://unpkg.com/3d-force-graph"></script>
+    <script src="https://unpkg.com/three"></script>
+    <script src="https://unpkg.com/three-spritetext"></script>
     
     <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
 
@@ -184,11 +186,19 @@
 
         <div class="col-span-12 lg:col-span-8 flex flex-col gap-6">
             
-            <div id="mapContainer" class="neon-box h-[350px] relative overflow-hidden hidden border-blue-500 shadow-[0_0_10px_rgba(0,243,255,0.2)]">
+            <div id="mapContainer" class="neon-box h-[400px] relative overflow-hidden hidden border-blue-500 shadow-[0_0_10px_rgba(0,243,255,0.2)]">
                 <div class="absolute top-0 left-0 w-full bg-blue-900/20 p-2 border-b border-blue-500 flex justify-between items-center z-10 pointer-events-none">
                     <span class="text-[10px] font-bold tracking-widest text-blue-400">>> ATTACK_SURFACE_MAPPER // 3D_NODE_GRAPH</span>
                     <span class="text-[10px] text-blue-400 animate-pulse">RENDERING...</span>
                 </div>
+                
+                <div class="absolute bottom-2 left-2 z-10 text-[10px] bg-black/80 p-3 border border-blue-900 rounded font-bold tracking-widest pointer-events-none">
+                    <div class="text-[#fcee0a] mb-1">■ TARGET ROOT</div>
+                    <div class="text-[#00f3ff] mb-1">■ SHADOW API</div>
+                    <div class="text-[#00ff41] mb-1">■ SPIDERED PATH</div>
+                    <div class="text-[#ff003c]">■ VULNERABILITY</div>
+                </div>
+
                 <div id="3d-graph" class="w-full h-full bg-[#020202] cursor-move"></div>
             </div>
 
@@ -248,36 +258,52 @@
         let graphData = { nodes: [], links: [] };
         let Graph = null;
         let rootNodeId = "TARGET";
+        let graphUpdatePending = false; // Prevents the blinking crash
+
+        function getNodeColor(group) {
+            if(group === 'root') return '#fcee0a';
+            if(group === 'api') return '#00f3ff';
+            if(group === 'spider') return '#00ff41';
+            if(group === 'vuln') return '#ff003c';
+            return '#ffffff';
+        }
 
         function init3DGraph() {
             const graphElem = document.getElementById('3d-graph');
-            // Check if library loaded
             if (typeof ForceGraph3D === 'undefined') return;
 
             Graph = ForceGraph3D()(graphElem)
                 .backgroundColor('#020202')
                 .showNavInfo(false)
-                .nodeRelSize(6)
-                .linkDirectionalParticles(2)
-                .linkDirectionalParticleWidth(1.5)
-                .linkDirectionalParticleSpeed(0.005)
-                .nodeColor(node => {
-                    if(node.group === 'root') return '#fcee0a';  // Yellow (Target)
-                    if(node.group === 'api') return '#00f3ff';   // Blue (Endpoints)
-                    if(node.group === 'spider') return '#00ff41'; // Green (Crawled)
-                    if(node.group === 'vuln') return '#ff003c';   // Red (Vuln)
-                    return '#ffffff';
+                // 🔴 NEW: RENDER TEXT INSTEAD OF DOTS
+                .nodeThreeObject(node => {
+                    const sprite = new SpriteText(node.id);
+                    sprite.color = getNodeColor(node.group);
+                    sprite.textHeight = node.group === 'root' ? 6 : 3; // Make root bigger
+                    sprite.fontWeight = 'bold';
+                    sprite.fontFace = 'Courier New';
+                    return sprite;
                 })
-                .nodeLabel('id')
-                .graphData(graphData);
+                .linkDirectionalParticles(2)
+                .linkDirectionalParticleWidth(1)
+                .linkDirectionalParticleSpeed(0.005)
+                .linkColor(() => '#333333');
+
+            // 🔴 NEW: Adjust physics so nodes push away from each other instead of clumping
+            Graph.d3Force('charge').strength(-150);
         }
 
-        // Helper to add nodes dynamically as logs roll in
         function addGraphNode(id, group, parentId) {
             if (!Graph) return;
             
-            // Limit string length for aesthetics
-            let displayId = id.length > 40 ? id.substring(0, 40) + '...' : id;
+            // Clean up the URL so it's readable on screen
+            let displayId = id;
+            if (displayId.includes(rootNodeId)) {
+                displayId = displayId.replace(rootNodeId, "");
+            }
+            if (displayId === "" || displayId === "/") return; // Skip empty nodes
+            
+            displayId = displayId.length > 30 ? displayId.substring(0, 30) + '...' : displayId;
 
             // Prevent duplicates
             if (!graphData.nodes.find(n => n.id === displayId)) {
@@ -285,11 +311,19 @@
                 if (parentId) {
                     graphData.links.push({ source: parentId, target: displayId });
                 }
-                
-                // Update graph
-                Graph.graphData(graphData);
+                // Flag that we need an update, but DON'T update immediately!
+                graphUpdatePending = true;
             }
         }
+
+        // 🔴 NEW: Render Loop (Updates smoothly once per second, stopping the blink)
+        setInterval(() => {
+            if (graphUpdatePending && Graph) {
+                // By passing a new object array, the engine seamlessly animates the new nodes in
+                Graph.graphData({ nodes: [...graphData.nodes], links: [...graphData.links] });
+                graphUpdatePending = false;
+            }
+        }, 1000);
 
         function setMode(mode) {
             currentMode = mode;

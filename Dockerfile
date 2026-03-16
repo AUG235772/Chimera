@@ -1,14 +1,10 @@
 # Use a base image that has Python
 FROM python:3.12-slim
 
-# 1. Install Java (Required for OWASP ZAP), wget, curl, and git
+# 1. Install Java, wget, curl, git, AND chromium (Fixed Syntax)
 RUN apt-get update && \
-    apt-get install -y default-jre wget curl git && \
-    wget \
-    default-jre \
-    chromium \
+    apt-get install -y default-jre wget curl git chromium && \
     rm -rf /var/lib/apt/lists/*
-    
 
 # 2. Install Python Requests for the helper script
 RUN pip install requests
@@ -24,8 +20,10 @@ RUN URL=$(python3 /tmp/get_zap_url.py) && \
     tar -xvf zap.tar.gz && \
     mv ZAP_* zap && \
     rm zap.tar.gz
+
 # CRITICAL: Fix permissions so any user can run ZAP
 RUN chmod +x /opt/zap/zap.sh
+
 # 5. Set up the App
 WORKDIR /app
 COPY . .
@@ -35,12 +33,9 @@ COPY . .
 RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install gunicorn
 
-# 7. Expose the port (Railway sets $PORT env var automatically)
-ENV PORT=5000
-EXPOSE $PORT
+# 7. Expose the port (Hugging Face requires 7860)
+ENV PORT=7860
+EXPOSE 7860
 
 # 8. Start Command: Run ZAP in background, then start Flask via Gunicorn
-# "api.disablekey=true" allows local connection from Flask without complex key handling on the server
-# Start ZAP in the background, wait 15 seconds for it to boot, then start the web app
-# Start ZAP from the correct /opt/zap path
 CMD ["/bin/sh", "-c", "/opt/zap/zap.sh -daemon -port 8080 -host 127.0.0.1 -config api.disablekey=true & sleep 20 && gunicorn -b 0.0.0.0:7860 --workers 1 --threads 8 --timeout 1200 app:app"]

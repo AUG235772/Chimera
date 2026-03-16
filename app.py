@@ -381,4 +381,4 @@ def handle_scan(data):
         emit('scan_complete', {'status': 'found', 'pdf': filename})
 
 if __name__ == '__main__':
-    socketio.run(app, debug=True, allow_unsafe_werkzeug=True)
+    socketio.run(app, host='0.0.0.0', port=7860, debug=False, allow_unsafe_werkzeug=True)

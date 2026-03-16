@@ -39,15 +39,23 @@ class NucleiEngine:
                     for line in f:
                         try:
                             data = json.loads(line.strip())
+                            
+                            # BULLETPROOF PARSING: If Nuclei returns a list, grab the first item
+                            if isinstance(data, list):
+                                if not data: continue
+                                data = data[0]
+                                
+                            if not isinstance(data, dict):
+                                continue
+
                             info = data.get('info', {})
                             
                             # Extract CVE ID if it exists
                             cve_id = ""
                             classification = info.get('classification', {})
-                            if 'cve-id' in classification and classification['cve-id']:
+                            if isinstance(classification, dict) and 'cve-id' in classification and classification['cve-id']:
                                 cve_id = f"[{classification['cve-id'][0]}] "
 
-                            # 🔴 NUCLEI GIVES US THE EXACT WEAPONIZED CURL COMMAND FOR THE EXPLOIT LAB!
                             poc_payload = data.get('curl-command', 'N/A')
                             
                             finding = {

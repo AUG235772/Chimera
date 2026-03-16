@@ -8,6 +8,7 @@ from flask_talisman import Talisman
 import requests
 import time
 from modules.nuclei_engine import NucleiEngine
+from modules.waf_detector import WAFDetector
 
 # Load Environment Variables
 load_dotenv()
@@ -278,6 +279,13 @@ def handle_scan(data):
             emit('scan_complete', {'status': 'error'})
             return
 
+        # ==========================================
+        # 🛡️ NEW: PHASE 0.5 - WAF PROFILING
+        # ==========================================
+        web_log("--- PHASE 0.5: ACTIVE DEFENSE PROFILING ---")
+        waf_detector = WAFDetector(target, logger_callback=web_log)
+        detected_waf = waf_detector.detect()
+
         web_log("--- PHASE 1: SPIDER & RECONNAISSANCE ---")
         recon = ReconEngine(target, logger_callback=web_log)
         endpoints = recon.start()
@@ -325,13 +333,19 @@ def handle_scan(data):
         # Combine ZAP's dynamic findings with Nuclei's CVE template findings
         raw_vulns = zap_vulns + nuclei_vulns
 
-        
+        # 🔴 INJECT WAF FINDING INTO THE REPORT
+        if detected_waf and detected_waf not in ["None Detected", "Unknown"]:
+            raw_vulns.append({
+                'type': f"Security Control: {detected_waf} Detected",
+                'severity': "INFO",
+                'url': target,
+                'payload': f"Edge Security Signatures matched for {detected_waf}",
+                'proof_of_concept': "N/A",
+                'impact': "The target is actively defended by a Web Application Firewall. This mitigates many automated attacks, blocks malicious payloads, and actively challenges bots.",
+                'remediation': "This is a positive security control. Ensure the WAF is configured in blocking mode with updated rulesets."
+            })
 
         web_log("--- PHASE 3: SMART DEDUPLICATION & THREAT SCORING ---")
-        analyst = AnalystEngine(raw_vulns, logger_callback=web_log)
-        verified_vulns = analyst.start()
-
-        web_log("--- PHASE 3.5: ACTIVE EXPLOIT VERIFICATION ---")
         try:
             exploiter = ExploiterEngine(verified_vulns, auth_header=auth_token, logger_callback=web_log)
             verified_vulns = exploiter.start() 

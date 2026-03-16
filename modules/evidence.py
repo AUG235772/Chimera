@@ -1,6 +1,7 @@
 # modules/evidence.py
 import os
 import time
+import platform
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service

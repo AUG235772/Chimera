@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CHIMERA // OPERATOR CONSOLE</title>
+    
+    <!-- Core Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Cyberpunk Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+
+    <style>
+        /* GLOBAL THEME */
+        :root {
+            --neon-green: #00ff41;
+            --neon-red: #ff003c;
+            --neon-yellow: #fcee0a;
+            --neon-blue: #00f3ff;
+            --dark-bg: #050505;
+            --panel-bg: rgba(10, 15, 10, 0.95);
+        }
+        
+        body { 
+            background-color: var(--dark-bg); 
+            color: var(--neon-green); 
+            font-family: 'Share Tech Mono', monospace; 
+            overflow-x: hidden;
+            background-image: linear-gradient(rgba(0, 255, 65, 0.03) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(0, 255, 65, 0.03) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        /* NEON BOXES */
+        .neon-box {
+            border: 1px solid var(--neon-green);
+            box-shadow: 0 0 5px var(--neon-green), inset 0 0 10px rgba(0, 255, 65, 0.1);
+            background: var(--panel-bg);
+            position: relative;
+        }
+
+        /* MODE TABS */
+        .tab-btn {
+            background: rgba(0, 50, 0, 0.5);
+            color: #444;
+            border: 1px solid #333;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .tab-btn.active {
+            background: var(--neon-green);
+            color: #000;
+            border-color: var(--neon-green);
+            box-shadow: 0 0 15px var(--neon-green);
+        }
+        
+        /* BLUE THEME FOR SAST MODE */
+        body.sast-mode { color: var(--neon-blue); }
+        .sast-mode .neon-box { border-color: var(--neon-blue); box-shadow: 0 0 5px var(--neon-blue); }
+        .sast-mode .btn-cyber { border-color: var(--neon-blue); color: var(--neon-blue); text-shadow: 0 0 5px var(--neon-blue); }
+        .sast-mode .btn-cyber:hover { background: var(--neon-blue); color: #000; box-shadow: 0 0 20px var(--neon-blue); }
+        .sast-mode .tab-btn.active { background: var(--neon-blue); border-color: var(--neon-blue); box-shadow: 0 0 15px var(--neon-blue); }
+
+        /* SCROLLBAR */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #000; border-left: 1px solid #333; }
+        ::-webkit-scrollbar-thumb { background: var(--neon-green); border: 1px solid #000; }
+        .sast-mode ::-webkit-scrollbar-thumb { background: var(--neon-blue); }
+
+        /* BUTTONS */
+        .btn-cyber {
+            background: transparent; border: 1px solid var(--neon-green);
+            color: var(--neon-green); transition: all 0.2s ease;
+            text-transform: uppercase; letter-spacing: 2px; position: relative; overflow: hidden;
+            text-shadow: 0 0 5px var(--neon-green);
+        }
+        .btn-cyber:hover {
+            background: var(--neon-green); color: #000;
+            box-shadow: 0 0 20px var(--neon-green);
+            text-shadow: none;
+            cursor: pointer;
+        }
+        
+        /* LOG TERMINAL */
+        .log-terminal { font-family: 'Courier New', Courier, monospace; font-size: 13px; line-height: 1.5; }
+        .pulse-text { animation: pulse-glow 2s infinite; }
+        @keyframes pulse-glow { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col p-4 lg:p-8 transition-colors duration-500">
+
+    <header class="flex flex-col md:flex-row justify-between items-center mb-8 border-b border-green-900 pb-4 header-border">
+        <div class="text-center md:text-left">
+            <h1 class="text-6xl font-black tracking-tighter text-shadow-glow mb-1">CHIMERA</h1>
+            <p id="subHeader" class="text-sm opacity-80 tracking-[0.6em]">AUTOMATED VULNERABILITY RECONNAISSANCE</p>
+        </div>
+        <div class="text-right mt-4 md:mt-0">
+            <div id="statusIndicator" class="text-xl font-bold pulse-text border px-4 py-1 inline-block">SYSTEM IDLE</div>
+            <div class="text-xs opacity-50 mt-1 tracking-widest">PROTOCOL: <span id="protocolType">DAST (WEB)</span></div>
+        </div>
+    </header>
+
+    <main class="grid grid-cols-12 gap-6 flex-grow">
+        
+        <div class="col-span-12 lg:col-span-4 flex flex-col gap-6">
+            
+            <div class="grid grid-cols-2 gap-2 mb-2">
+                <button onclick="setMode('web')" id="btnWeb" class="tab-btn active p-3 font-bold text-center">WEB SCANNER</button>
+                <button onclick="setMode('code')" id="btnCode" class="tab-btn p-3 font-bold text-center">CODE AUDITOR</button>
+            </div>
+
+            <div class="neon-box p-6 relative overflow-hidden">
+                <div class="text-xs font-bold mb-4 flex justify-between items-center">
+                    <span id="configLabel">// TARGET_CONFIGURATION</span>
+                    <span class="w-2 h-2 bg-current rounded-full animate-ping"></span>
+                </div>
+                
+                <div class="space-y-5">
+                    <div>
+                        <input type="text" id="urlInput" placeholder="https://example.com" 
+                               class="w-full p-4 bg-black border text-current border-current focus:outline-none focus:shadow-[0_0_15px_rgba(0,255,0,0.3)] text-sm tracking-wide">
+                    </div>
+                    <div id="authField">
+                        <input type="text" id="authInput" placeholder="[OPTIONAL] SESSION COOKIE / JWT" 
+                               class="w-full p-4 bg-black border text-current border-current focus:outline-none focus:shadow-[0_0_15px_rgba(0,255,0,0.3)] text-sm tracking-wide">
+                    </div>
+                    <div id="ghTokenField" class="hidden">
+                        <input type="text" id="ghTokenInput" placeholder="[OPTIONAL] GITHUB PAT (For Private Repos)" 
+                               class="w-full p-4 bg-black border text-current border-current focus:outline-none focus:shadow-[0_0_15px_rgba(0,255,255,0.3)] text-sm tracking-wide">
+                    </div>
+
+                    <button onclick="startScan()" class="btn-cyber w-full py-4 font-bold text-lg mt-2 tracking-widest border-2">
+                        INITIATE <span id="btnAction">SCAN</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="neon-box p-6 flex-grow flex flex-col">
+                <div class="text-xs font-bold mb-4 border-b border-current pb-2 opacity-70">// LIVE_TELEMETRY</div>
+                
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <div class="text-center p-4 border border-current bg-black">
+                        <div class="text-xs opacity-60 mb-1">TOTAL THREATS</div>
+                        <div id="vulnCount" class="text-4xl font-bold">0</div>
+                    </div>
+                    <div class="text-center p-4 border border-red-900 bg-black">
+                        <div class="text-xs opacity-60 mb-1 text-red-400">CRITICAL</div>
+                        <div id="critCount" class="text-4xl font-bold text-red-500 text-shadow-[0_0_10px_red]">0</div>
+                    </div>
+                </div>
+
+                <div class="relative h-48 w-full mt-auto border border-current bg-black p-2">
+                    <canvas id="riskChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-span-12 lg:col-span-8 flex flex-col gap-6">
+            
+            <div class="neon-box flex-grow flex flex-col h-[600px] lg:h-auto overflow-hidden">
+                <div class="bg-black/40 p-3 border-b border-current flex justify-between items-center">
+                    <span class="text-xs font-bold tracking-widest">>> SYSTEM_LOG_STREAM</span>
+                    <div class="flex gap-2">
+                        <div class="w-3 h-3 rounded-full bg-red-600"></div>
+                        <div class="w-3 h-3 rounded-full bg-yellow-600"></div>
+                        <div class="w-3 h-3 rounded-full bg-green-600"></div>
+                    </div>
+                </div>
+                <div id="logBox" class="log-terminal p-6 overflow-y-auto flex-grow bg-black">
+                    <div class="opacity-50 text-center mt-24 tracking-widest">
+                        // AWAITING INPUT...<br>
+                        // SYSTEM STANDBY<br>
+                        <span class="animate-pulse">_</span>
+                    </div>
+                </div>
+            </div>
+
+            <div id="resultArea" class="hidden neon-box p-6 bg-black/50 flex justify-between items-center border-l-4 border-l-current animate-pulse">
+                <div>
+                    <h3 class="text-2xl font-bold tracking-tight">AUDIT COMPLETE</h3>
+                    <p class="text-xs opacity-70 tracking-widest">FORENSIC REPORT GENERATED</p>
+                </div>
+                <a id="downloadLink" href="#" class="btn-cyber px-10 py-4 text-sm font-bold bg-black shadow-[0_0_20px_rgba(0,255,0,0.4)]">
+                    DOWNLOAD PDF
+                </a>
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+        let socket = null;
+        let totalVulns = 0;
+        let critVulns = 0;
+        let riskChart;
+        let currentMode = 'web'; 
+        const logBox = document.getElementById('logBox');
+
+        function setMode(mode) {
+            currentMode = mode;
+            const body = document.body;
+            const urlInput = document.getElementById('urlInput');
+            const authInput = document.getElementById('authField');
+            const ghInput = document.getElementById('ghTokenField');
+            const btnWeb = document.getElementById('btnWeb');
+            const btnCode = document.getElementById('btnCode');
+            const protocol = document.getElementById('protocolType');
+            const subHeader = document.getElementById('subHeader');
+            const btnAction = document.getElementById('btnAction');
+
+            logBox.innerHTML = "<div class='opacity-50 text-center mt-24 tracking-widest'>// MODE SWITCHED<br>// SYSTEM READY</div>";
+            document.getElementById('resultArea').classList.add('hidden');
+            totalVulns = 0; critVulns = 0; updateStats();
+
+            if (mode === 'code') {
+                body.classList.add('sast-mode');
+                btnWeb.classList.remove('active');
+                btnCode.classList.add('active');
+                
+                urlInput.placeholder = "https://github.com/username/repository";
+                authInput.classList.add('hidden');
+                ghInput.classList.remove('hidden');
+                
+                protocol.innerText = "SAST (SOURCE CODE)";
+                subHeader.innerText = "STATIC APPLICATION SECURITY TESTING";
+                btnAction.innerText = "AUDIT";
+                
+                if(riskChart) {
+                    riskChart.data.datasets[0].borderColor = '#00f3ff';
+                    riskChart.data.datasets[0].pointBorderColor = '#00f3ff';
+                    riskChart.data.datasets[0].backgroundColor = 'rgba(0, 243, 255, 0.1)';
+                }
+            } else {
+                body.classList.remove('sast-mode');
+                btnWeb.classList.add('active');
+                btnCode.classList.remove('active');
+                
+                urlInput.placeholder = "https://example.com";
+                authInput.classList.remove('hidden');
+                ghInput.classList.add('hidden');
+                
+                protocol.innerText = "DAST (WEB)";
+                subHeader.innerText = "AUTOMATED VULNERABILITY RECONNAISSANCE";
+                btnAction.innerText = "SCAN";
+
+                if(riskChart) {
+                    riskChart.data.datasets[0].borderColor = '#00ff41';
+                    riskChart.data.datasets[0].pointBorderColor = '#00ff41';
+                    riskChart.data.datasets[0].backgroundColor = 'rgba(0, 255, 65, 0.1)';
+                }
+            }
+            if(riskChart) riskChart.update();
+        }
+
+        function initChart() {
+            try {
+                const ctx = document.getElementById('riskChart').getContext('2d');
+                riskChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            label: 'Threat Velocity',
+                            data: [],
+                            borderColor: '#00ff41',
+                            borderWidth: 2,
+                            pointBackgroundColor: '#000',
+                            pointBorderColor: '#00ff41',
+                            tension: 0.4,
+                            fill: true,
+                            backgroundColor: 'rgba(0, 255, 65, 0.1)'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: { display: false },
+                            y: { display: true, grid: { color: '#111' }, ticks: { color: '#555' } }
+                        },
+                        animation: { duration: 0 }
+                    }
+                });
+            } catch (e) { console.error("Chart init failed:", e); }
+        }
+
+        function initSocket() {
+            if (typeof io === 'undefined') {
+                logBox.innerHTML = "<div class='text-red-500'>[ERROR] CONNECTION MODULE MISSING. REFRESH.</div>";
+                return;
+            }
+
+            if (!socket) {
+                socket = io();
+                
+                socket.on('log_update', function(msg) {
+                    let text = (typeof msg === 'object') ? msg.data : msg;
+                    const div = document.createElement('div');
+                    div.className = "mb-1 break-all border-l-2 border-transparent pl-2 hover:bg-white/10 transition-colors";
+
+                    if(text.includes("[CRITICAL]") || text.includes("❌") || text.includes("🔥")) 
+                        div.className += " text-red-500 font-bold border-red-600 bg-red-900/10";
+                    else if(text.includes("[HIGH]") || text.includes("⚠️")) 
+                        div.className += " text-orange-400 border-orange-500";
+                    else if(text.includes("✅") || text.includes("🚀") || text.includes("🔓")) 
+                        div.className += currentMode === 'code' ? " text-cyan-300 font-bold border-cyan-500" : " text-green-300 font-bold border-green-500";
+                    else 
+                        div.className += " opacity-90";
+
+                    div.innerText = "> " + text;
+                    logBox.appendChild(div);
+                    logBox.scrollTop = logBox.scrollHeight;
+
+                    // Telemetry Parsing
+                    if(text.includes("Downloaded") && text.includes("alerts")) {
+                        const match = text.match(/Downloaded (\d+) alerts/);
+                        if(match && match[1]) { totalVulns = parseInt(match[1]); updateStats(); }
+                    }
+                    if(text.includes("[TELEMETRY]") && text.includes("CRITICAL/HIGH")) {
+                        const match = text.match(/Identified (\d+) CRITICAL\/HIGH/);
+                        if(match && match[1]) { critVulns += parseInt(match[1]); updateStats(); }
+                    }
+                    if(text.includes("ISSUE FOUND")) {
+                        critVulns++; totalVulns++; updateStats();
+                    }
+                });
+
+                socket.on('scan_complete', function(data) {
+                    const status = document.getElementById('statusIndicator');
+                    status.innerText = "SYSTEM IDLE";
+                    status.classList.remove('pulse-text', 'text-yellow-500');
+                    status.classList.add(currentMode === 'code' ? 'text-cyan-500' : 'text-green-500');
+
+                    if (data.status === 'found' && data.pdf) {
+                        document.getElementById('resultArea').classList.remove('hidden');
+                        document.getElementById('downloadLink').href = "/download/" + data.pdf;
+                    }
+                });
+            }
+        }
+
+        function updateStats() {
+            document.getElementById('vulnCount').innerText = totalVulns;
+            document.getElementById('critCount').innerText = critVulns;
+            const now = new Date().toLocaleTimeString();
+            if (riskChart) {
+                riskChart.data.labels.push(now);
+                riskChart.data.datasets[0].data.push(totalVulns);
+                if(riskChart.data.labels.length > 15) {
+                    riskChart.data.labels.shift();
+                    riskChart.data.datasets[0].data.shift();
+                }
+                riskChart.update();
+            }
+        }
+
+        function startScan() {
+            const url = document.getElementById('urlInput').value.trim();
+            
+            if(!url) return alert("TARGET REQUIRED // ABORTING");
+            
+            // --- NEW: STRICT URL VALIDATION ---
+            if (currentMode === 'code') {
+                if (!url.startsWith("https://github.com/")) {
+                    alert("ERROR: Code Auditor requires a valid GitHub Repository URL starting with 'https://github.com/'");
+                    return;
+                }
+            } else if (currentMode === 'web') {
+                if (url.startsWith("https://github.com/")) {
+                    alert("ERROR: You pasted a GitHub URL into the Web Scanner. Please switch to the 'CODE AUDITOR' tab above.");
+                    return;
+                }
+            }
+            
+            logBox.innerHTML = "";
+            totalVulns = 0; critVulns = 0; updateStats();
+            document.getElementById('resultArea').classList.add('hidden');
+            
+            const status = document.getElementById('statusIndicator');
+            status.innerText = "PROTOCOL ACTIVE";
+            status.className = "text-xl font-bold pulse-text border px-4 py-1 inline-block text-yellow-500 border-yellow-500";
+            
+            if (socket) {
+                if (currentMode === 'web') {
+                    const auth = document.getElementById('authInput').value;
+                    socket.emit('start_scan', {url: url, auth_token: auth, mode: 'web'});
+                } else {
+                    const ghToken = document.getElementById('ghTokenInput').value;
+                    socket.emit('start_scan', {url: url, gh_token: ghToken, mode: 'code'});
+                }
+            } else {
+                alert("Connection lost. Refreshing...");
+                window.location.reload();
+            }
+        }
+
+        window.onload = function() { initChart(); initSocket(); };
+    </script>
+</body>
+</html>

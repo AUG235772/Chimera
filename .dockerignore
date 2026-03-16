@@ -1,0 +1,22 @@
+# Ignore the virtual environment folder
+venv/
+env/
+.venv/
+
+# Ignore Git history (can be huge)
+.git/
+.gitignore
+
+# Ignore Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore local environment secrets
+.env
+
+# Ignore any large local model files (download these in code instead)
+*.pt
+*.bin
+*.h5

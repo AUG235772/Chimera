@@ -19,7 +19,6 @@ class EvidenceCollector:
     def capture_screenshot(self, url, finding_name="Target"):
         self.log(f"📸 [EVIDENCE] Snapping proof-of-concept photo for: {url}")
         try:
-            # Configure Headless Chrome (Stealth Mode)
             chrome_options = Options()
             chrome_options.add_argument("--headless")
             chrome_options.add_argument("--no-sandbox")
@@ -27,15 +26,20 @@ class EvidenceCollector:
             chrome_options.add_argument("--window-size=1920,1080")
             chrome_options.add_argument("--ignore-certificate-errors")
             
-            # Auto-install and launch the Chrome driver
-            service = Service(ChromeDriverManager().install())
-            driver = webdriver.Chrome(service=service, options=chrome_options)
+            # 🔴 SMART DRIVER SELECTOR
+            # If running on Hugging Face (Linux) with system Chromium installed
+            if platform.system() == 'Linux' and os.path.exists('/usr/bin/chromedriver'):
+                chrome_options.binary_location = '/usr/bin/chromium'
+                service = Service('/usr/bin/chromedriver')
+                driver = webdriver.Chrome(service=service, options=chrome_options)
+            else:
+                # If running locally on Windows/Mac
+                service = Service(ChromeDriverManager().install())
+                driver = webdriver.Chrome(service=service, options=chrome_options)
             
-            # Navigate and capture
             driver.get(url)
-            time.sleep(3) # Wait 3 seconds for SPA/JS payloads to trigger
+            time.sleep(3) # Wait for page to render
             
-            # Clean filename to prevent OS errors
             safe_name = "".join(x for x in finding_name if x.isalnum() or x in " _-").strip().replace(' ', '_')
             filename = f"proof_{safe_name}_{int(time.time())}.png"
             filepath = os.path.join(self.evidence_dir, filename)

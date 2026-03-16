@@ -3,7 +3,7 @@ FROM python:3.12-slim
 
 # 1. Install Java, wget, curl, git, AND chromium (Fixed Syntax)
 RUN apt-get update && \
-    apt-get install -y default-jre wget curl git chromium && \
+    apt-get install -y default-jre wget curl git chromium chromium-driver && \
     rm -rf /var/lib/apt/lists/*
 
 # 2. Install Python Requests for the helper script
@@ -20,6 +20,7 @@ RUN URL=$(python3 /tmp/get_zap_url.py) && \
     tar -xvf zap.tar.gz && \
     mv ZAP_* zap && \
     rm zap.tar.gz
+    
 
 # CRITICAL: Fix permissions so any user can run ZAP
 RUN chmod +x /opt/zap/zap.sh

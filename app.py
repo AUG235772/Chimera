@@ -51,9 +51,9 @@ csp = {
 # 3. Initialize Talisman (Security Headers)
 Talisman(app, 
     content_security_policy=csp,
-    force_https=True,           
+    force_https=False,           
     strict_transport_security=True,
-    session_cookie_secure=True,
+    session_cookie_secure=False,
     session_cookie_http_only=True,
     frame_options='ALLOWALL' # Prevents "Refused to connect" in iframe
 )

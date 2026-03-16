@@ -30,3 +30,4 @@ beautifulsoup4
 flask-talisman
 selenium
 webdriver-manager
+selenium-stealth

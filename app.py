@@ -7,6 +7,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_talisman import Talisman 
 import requests
 import time
+from modules.nuclei_engine import NucleiEngine
 
 # Load Environment Variables
 load_dotenv()
@@ -306,10 +307,25 @@ def handle_scan(data):
 
         try:
             zap_engine = ZapScanner(target, api_key=ZAP_API_KEY, auth_header=auth_token, logger_callback=web_log)
-            raw_vulns = zap_engine.start_scan() 
+            zap_vulns = zap_engine.start_scan() 
         except Exception as e:
             web_log(f"❌ ZAP Error: {str(e)}")
-            return
+            zap_vulns = []
+
+        # ==========================================
+        # ☢️ NEW: PHASE 2.5 - NUCLEI CVE ENGINE
+        # ==========================================
+        try:
+            nuclei_engine = NucleiEngine(target, auth_header=auth_token, logger_callback=web_log)
+            nuclei_vulns = nuclei_engine.start_scan()
+        except Exception as e:
+            web_log(f"⚠️ Nuclei Warning: {str(e)}")
+            nuclei_vulns = []
+
+        # Combine ZAP's dynamic findings with Nuclei's CVE template findings
+        raw_vulns = zap_vulns + nuclei_vulns
+
+        
 
         web_log("--- PHASE 3: SMART DEDUPLICATION & THREAT SCORING ---")
         analyst = AnalystEngine(raw_vulns, logger_callback=web_log)
@@ -339,7 +355,8 @@ def handle_scan(data):
         # ==========================================
         web_log("--- PHASE 5: COLLECTING FORENSIC EVIDENCE ---")
         try:
-            evidence_collector = EvidenceCollector(logger_callback=web_log)
+            # 🔴 Passing the auth_token so the camera can log in
+            evidence_collector = EvidenceCollector(auth_header=auth_token, logger_callback=web_log)
         except Exception as e:
             web_log(f"⚠️ Could not initialize camera: {str(e)}")
             evidence_collector = None

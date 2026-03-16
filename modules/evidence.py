@@ -6,19 +6,21 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
+from selenium_stealth import stealth
+from urllib.parse import urlparse
 from utils import logger
 
 class EvidenceCollector:
-    def __init__(self, logger_callback=None):
+    def __init__(self, auth_header=None, logger_callback=None):
         self.log = logger_callback if logger_callback else logger.info
         self.evidence_dir = os.path.join(os.getcwd(), 'evidence')
+        self.auth_header = auth_header # NEW: The keys to the castle
         
-        # Create evidence folder if it doesn't exist
         if not os.path.exists(self.evidence_dir):
             os.makedirs(self.evidence_dir)
 
     def capture_screenshot(self, url, finding_name="Target"):
-        self.log(f"📸 [EVIDENCE] Snapping proof-of-concept photo for: {url}")
+        self.log(f"📸 [EVIDENCE] Deploying stealth camera to: {url}")
         try:
             chrome_options = Options()
             chrome_options.add_argument("--headless")
@@ -26,26 +28,49 @@ class EvidenceCollector:
             chrome_options.add_argument("--disable-dev-shm-usage")
             chrome_options.add_argument("--window-size=1920,1080")
             chrome_options.add_argument("--ignore-certificate-errors")
-            
-            # 🔴 NEW: STEALTH MODE TO BYPASS VERCEL/CLOUDFLARE
             chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-            chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
             chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
             chrome_options.add_experimental_option('useAutomationExtension', False)
             
-            # 🔴 SMART DRIVER SELECTOR
-            # If running on Hugging Face (Linux) with system Chromium installed
-            if platform.system() == 'Linux' and os.path.exists('/usr/bin/chromedriver'):
+            # SMART DRIVER SELECTOR
+            if platform.system() == 'Linux' and os.path.exists('/usr/bin/chromium'):
                 chrome_options.binary_location = '/usr/bin/chromium'
                 service = Service('/usr/bin/chromedriver')
                 driver = webdriver.Chrome(service=service, options=chrome_options)
             else:
-                # If running locally on Windows/Mac
                 service = Service(ChromeDriverManager().install())
                 driver = webdriver.Chrome(service=service, options=chrome_options)
+
+            # 🔴 THE GHOST PROTOCOL: Spoofing a real human fingerprint to bypass Vercel/Cloudflare
+            stealth(driver,
+                languages=["en-US", "en"],
+                vendor="Google Inc.",
+                platform="Win32",
+                webgl_vendor="Intel Inc.",
+                renderer="Intel Iris OpenGL Engine",
+                fix_hairline=True,
+            )
             
+            # 🔴 THE AUTHENTICATION INJECTOR: Bypassing the Login Page
+            if self.auth_header:
+                self.log("🔑 [EVIDENCE] Injecting authentication credentials...")
+                # To set a cookie, we must first visit the domain
+                domain = f"{urlparse(url).scheme}://{urlparse(url).netloc}"
+                driver.get(domain)
+                time.sleep(2)
+                
+                # Assume auth_header is passed as a standard cookie string (e.g., "session_id=12345")
+                try:
+                    cookie_name, cookie_value = self.auth_header.split('=', 1)
+                    driver.add_cookie({"name": cookie_name.strip(), "value": cookie_value.strip()})
+                except Exception:
+                    self.log("⚠️ [EVIDENCE] Auth token format not recognized for cookie injection. Attempting access anyway.")
+            
+            # Navigate to the actual vulnerable endpoint
             driver.get(url)
-            time.sleep(3) # Wait for page to render
+            
+            # Wait 6 seconds for WAF challenges to pass and React/Vue apps to load
+            time.sleep(6) 
             
             safe_name = "".join(x for x in finding_name if x.isalnum() or x in " _-").strip().replace(' ', '_')
             filename = f"proof_{safe_name}_{int(time.time())}.png"
@@ -54,19 +79,9 @@ class EvidenceCollector:
             driver.save_screenshot(filepath)
             driver.quit()
             
-            self.log(f"✅ [EVIDENCE] Proof acquired: {filename}")
+            self.log(f"✅ [EVIDENCE] Stealth proof acquired: {filename}")
             return filepath
             
         except Exception as e:
             self.log(f"⚠️ [EVIDENCE] Camera malfunction: {str(e)}")
             return None
-
-    def format_http_traffic(self, req_header, req_body, res_header, res_body):
-        """Formats raw HTTP traffic to look like Burp Suite repeater output for the PDF report"""
-        evidence = "=== RAW HTTP REQUEST ===\n"
-        evidence += f"{req_header}\n\n{req_body if req_body else ''}\n\n"
-        evidence += "=== RAW HTTP RESPONSE ===\n"
-        # Truncate response body so it doesn't flood the PDF with 100 pages of HTML
-        safe_res_body = (res_body[:1000] + '\n...[TRUNCATED]') if len(res_body) > 1000 else res_body
-        evidence += f"{res_header}\n\n{safe_res_body}"
-        return evidence

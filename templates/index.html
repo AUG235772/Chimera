@@ -5,12 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CHIMERA // OPERATOR CONSOLE</title>
     
-    <!-- Core Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
-    <!-- Cyberpunk Font -->
+    <script src="https://unpkg.com/3d-force-graph"></script>
+    
     <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
 
     <style>
@@ -20,6 +20,7 @@
             --neon-red: #ff003c;
             --neon-yellow: #fcee0a;
             --neon-blue: #00f3ff;
+            --neon-purple: #9d00ff;
             --dark-bg: #050505;
             --panel-bg: rgba(10, 15, 10, 0.95);
         }
@@ -83,11 +84,34 @@
             text-shadow: none;
             cursor: pointer;
         }
+
+        .btn-fire {
+            background: rgba(157, 0, 255, 0.1); border: 1px solid var(--neon-purple);
+            color: var(--neon-purple); transition: all 0.2s ease;
+            text-shadow: 0 0 5px var(--neon-purple);
+        }
+        .btn-fire:hover {
+            background: var(--neon-red); border-color: var(--neon-red); color: #fff;
+            box-shadow: 0 0 20px var(--neon-red); text-shadow: none; cursor: pointer;
+        }
         
         /* LOG TERMINAL */
         .log-terminal { font-family: 'Courier New', Courier, monospace; font-size: 13px; line-height: 1.5; }
         .pulse-text { animation: pulse-glow 2s infinite; }
         @keyframes pulse-glow { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+        .exploit-code {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: #0a0a0a;
+            color: var(--neon-purple);
+            border: 1px solid #333;
+            width: 100%;
+            padding: 10px;
+            font-size: 12px;
+            resize: vertical;
+        }
+        .exploit-code:focus { outline: none; border-color: var(--neon-purple); box-shadow: 0 0 10px rgba(157, 0, 255, 0.2); }
+        .response-box { font-family: 'Courier New', Courier, monospace; background-color: #000; color: #ccc; border: 1px dashed #444; padding: 10px; font-size: 12px; max-height: 200px; overflow-y: auto; white-space: pre-wrap; }
     </style>
 </head>
 <body class="min-h-screen flex flex-col p-4 lg:p-8 transition-colors duration-500">
@@ -160,7 +184,15 @@
 
         <div class="col-span-12 lg:col-span-8 flex flex-col gap-6">
             
-            <div class="neon-box flex-grow flex flex-col h-[600px] lg:h-auto overflow-hidden">
+            <div id="mapContainer" class="neon-box h-[350px] relative overflow-hidden hidden border-blue-500 shadow-[0_0_10px_rgba(0,243,255,0.2)]">
+                <div class="absolute top-0 left-0 w-full bg-blue-900/20 p-2 border-b border-blue-500 flex justify-between items-center z-10 pointer-events-none">
+                    <span class="text-[10px] font-bold tracking-widest text-blue-400">>> ATTACK_SURFACE_MAPPER // 3D_NODE_GRAPH</span>
+                    <span class="text-[10px] text-blue-400 animate-pulse">RENDERING...</span>
+                </div>
+                <div id="3d-graph" class="w-full h-full bg-[#020202] cursor-move"></div>
+            </div>
+
+            <div class="neon-box flex-grow flex flex-col h-[300px] overflow-hidden">
                 <div class="bg-black/40 p-3 border-b border-current flex justify-between items-center">
                     <span class="text-xs font-bold tracking-widest">>> SYSTEM_LOG_STREAM</span>
                     <div class="flex gap-2">
@@ -176,6 +208,15 @@
                         <span class="animate-pulse">_</span>
                     </div>
                 </div>
+            </div>
+
+            <div id="exploitLabContainer" class="hidden neon-box flex flex-col border-purple-800 shadow-[0_0_10px_rgba(157,0,255,0.2)]">
+                <div class="bg-purple-900/20 p-3 border-b border-purple-800 flex justify-between items-center">
+                    <span class="text-xs font-bold tracking-widest text-purple-400">>> EXPLOIT_REPLAY_LAB // INTERACTIVE</span>
+                    <span class="text-xs text-purple-400 animate-pulse">LIVE</span>
+                </div>
+                <div id="exploitList" class="p-4 space-y-4 bg-black/80 max-h-[500px] overflow-y-auto">
+                    </div>
             </div>
 
             <div id="resultArea" class="hidden neon-box p-6 bg-black/50 flex justify-between items-center border-l-4 border-l-current animate-pulse">
@@ -197,7 +238,58 @@
         let critVulns = 0;
         let riskChart;
         let currentMode = 'web'; 
+        let exploitCounter = 0;
         const logBox = document.getElementById('logBox');
+        const exploitLabContainer = document.getElementById('exploitLabContainer');
+        const exploitList = document.getElementById('exploitList');
+        const mapContainer = document.getElementById('mapContainer');
+
+        // 🔴 3D GRAPH VARIABLES
+        let graphData = { nodes: [], links: [] };
+        let Graph = null;
+        let rootNodeId = "TARGET";
+
+        function init3DGraph() {
+            const graphElem = document.getElementById('3d-graph');
+            // Check if library loaded
+            if (typeof ForceGraph3D === 'undefined') return;
+
+            Graph = ForceGraph3D()(graphElem)
+                .backgroundColor('#020202')
+                .showNavInfo(false)
+                .nodeRelSize(6)
+                .linkDirectionalParticles(2)
+                .linkDirectionalParticleWidth(1.5)
+                .linkDirectionalParticleSpeed(0.005)
+                .nodeColor(node => {
+                    if(node.group === 'root') return '#fcee0a';  // Yellow (Target)
+                    if(node.group === 'api') return '#00f3ff';   // Blue (Endpoints)
+                    if(node.group === 'spider') return '#00ff41'; // Green (Crawled)
+                    if(node.group === 'vuln') return '#ff003c';   // Red (Vuln)
+                    return '#ffffff';
+                })
+                .nodeLabel('id')
+                .graphData(graphData);
+        }
+
+        // Helper to add nodes dynamically as logs roll in
+        function addGraphNode(id, group, parentId) {
+            if (!Graph) return;
+            
+            // Limit string length for aesthetics
+            let displayId = id.length > 40 ? id.substring(0, 40) + '...' : id;
+
+            // Prevent duplicates
+            if (!graphData.nodes.find(n => n.id === displayId)) {
+                graphData.nodes.push({ id: displayId, group: group });
+                if (parentId) {
+                    graphData.links.push({ source: parentId, target: displayId });
+                }
+                
+                // Update graph
+                Graph.graphData(graphData);
+            }
+        }
 
         function setMode(mode) {
             currentMode = mode;
@@ -213,17 +305,19 @@
 
             logBox.innerHTML = "<div class='opacity-50 text-center mt-24 tracking-widest'>// MODE SWITCHED<br>// SYSTEM READY</div>";
             document.getElementById('resultArea').classList.add('hidden');
-            totalVulns = 0; critVulns = 0; updateStats();
+            exploitLabContainer.classList.add('hidden');
+            mapContainer.classList.add('hidden');
+            exploitList.innerHTML = "";
+            
+            totalVulns = 0; critVulns = 0; exploitCounter = 0; updateStats();
 
             if (mode === 'code') {
                 body.classList.add('sast-mode');
                 btnWeb.classList.remove('active');
                 btnCode.classList.add('active');
-                
                 urlInput.placeholder = "https://github.com/username/repository";
                 authInput.classList.add('hidden');
                 ghInput.classList.remove('hidden');
-                
                 protocol.innerText = "SAST (SOURCE CODE)";
                 subHeader.innerText = "STATIC APPLICATION SECURITY TESTING";
                 btnAction.innerText = "AUDIT";
@@ -237,11 +331,9 @@
                 body.classList.remove('sast-mode');
                 btnWeb.classList.add('active');
                 btnCode.classList.remove('active');
-                
                 urlInput.placeholder = "https://example.com";
                 authInput.classList.remove('hidden');
                 ghInput.classList.add('hidden');
-                
                 protocol.innerText = "DAST (WEB)";
                 subHeader.innerText = "AUTOMATED VULNERABILITY RECONNAISSANCE";
                 btnAction.innerText = "SCAN";
@@ -260,30 +352,8 @@
                 const ctx = document.getElementById('riskChart').getContext('2d');
                 riskChart = new Chart(ctx, {
                     type: 'line',
-                    data: {
-                        labels: [],
-                        datasets: [{
-                            label: 'Threat Velocity',
-                            data: [],
-                            borderColor: '#00ff41',
-                            borderWidth: 2,
-                            pointBackgroundColor: '#000',
-                            pointBorderColor: '#00ff41',
-                            tension: 0.4,
-                            fill: true,
-                            backgroundColor: 'rgba(0, 255, 65, 0.1)'
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: { legend: { display: false } },
-                        scales: {
-                            x: { display: false },
-                            y: { display: true, grid: { color: '#111' }, ticks: { color: '#555' } }
-                        },
-                        animation: { duration: 0 }
-                    }
+                    data: { labels: [], datasets: [{ label: 'Threat Velocity', data: [], borderColor: '#00ff41', borderWidth: 2, pointBackgroundColor: '#000', pointBorderColor: '#00ff41', tension: 0.4, fill: true, backgroundColor: 'rgba(0, 255, 65, 0.1)' }] },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: true, grid: { color: '#111' }, ticks: { color: '#555' } } }, animation: { duration: 0 } }
                 });
             } catch (e) { console.error("Chart init failed:", e); }
         }
@@ -302,11 +372,11 @@
                     const div = document.createElement('div');
                     div.className = "mb-1 break-all border-l-2 border-transparent pl-2 hover:bg-white/10 transition-colors";
 
-                    if(text.includes("[CRITICAL]") || text.includes("❌") || text.includes("🔥")) 
+                    if(text.includes("[CRITICAL]") || text.includes("❌") || text.includes("🔥") || text.includes("🚨")) 
                         div.className += " text-red-500 font-bold border-red-600 bg-red-900/10";
-                    else if(text.includes("[HIGH]") || text.includes("⚠️")) 
+                    else if(text.includes("[HIGH]") || text.includes("⚠️") || text.includes("☢️")) 
                         div.className += " text-orange-400 border-orange-500";
-                    else if(text.includes("✅") || text.includes("🚀") || text.includes("🔓")) 
+                    else if(text.includes("✅") || text.includes("🚀") || text.includes("🔓") || text.includes("🛡️")) 
                         div.className += currentMode === 'code' ? " text-cyan-300 font-bold border-cyan-500" : " text-green-300 font-bold border-green-500";
                     else 
                         div.className += " opacity-90";
@@ -315,7 +385,26 @@
                     logBox.appendChild(div);
                     logBox.scrollTop = logBox.scrollHeight;
 
-                    // Telemetry Parsing
+                    // --- 🔴 GRAPH INTERCEPTION LOGIC ---
+                    if (currentMode === 'web') {
+                        // Extract discovered API paths
+                        if(text.includes("[SHADOW API] Discovered hidden path:")) {
+                            let path = text.split("path: ")[1].split(" ")[0]; 
+                            addGraphNode(path, 'api', rootNodeId);
+                        }
+                        // Extract Spidered URLs
+                        if(text.includes("Spidering: ")) {
+                            let crawledUrl = text.split("Spidering: ")[1].trim();
+                            // Keep node names clean
+                            let cleanUrl = crawledUrl.replace(rootNodeId, "");
+                            if(cleanUrl.length > 2) addGraphNode(cleanUrl, 'spider', rootNodeId);
+                        }
+                        // Extract general vulnerabilities
+                        if(text.includes("ISSUE FOUND")) {
+                            critVulns++; totalVulns++; updateStats();
+                        }
+                    }
+
                     if(text.includes("Downloaded") && text.includes("alerts")) {
                         const match = text.match(/Downloaded (\d+) alerts/);
                         if(match && match[1]) { totalVulns = parseInt(match[1]); updateStats(); }
@@ -324,8 +413,36 @@
                         const match = text.match(/Identified (\d+) CRITICAL\/HIGH/);
                         if(match && match[1]) { critVulns += parseInt(match[1]); updateStats(); }
                     }
-                    if(text.includes("ISSUE FOUND")) {
-                        critVulns++; totalVulns++; updateStats();
+                });
+
+                socket.on('new_exploit', function(data) {
+                    exploitLabContainer.classList.remove('hidden');
+                    exploitCounter++;
+                    
+                    // Add Vuln to 3D Graph
+                    if (currentMode === 'web') addGraphNode(data.type, 'vuln', rootNodeId);
+                    
+                    const exploitId = `exploit_${exploitCounter}`;
+                    const html = `
+                        <div class="border border-purple-800 p-4 bg-black relative">
+                            <div class="absolute top-0 right-0 bg-red-600 text-white text-[10px] font-bold px-2 py-1">WEAPONIZED</div>
+                            <h4 class="text-purple-400 font-bold mb-2">[${data.severity}] ${data.type}</h4>
+                            <p class="text-xs text-gray-400 mb-2">TARGET: ${data.url}</p>
+                            <textarea id="payload_${exploitId}" class="exploit-code" rows="4">${data.payload}</textarea>
+                            <button onclick="fireExploit('${exploitId}')" class="btn-fire px-6 py-2 text-xs font-bold mt-2 w-full">
+                                🔥 FIRE EXPLOIT
+                            </button>
+                            <div id="response_${exploitId}" class="response-box hidden mt-3"></div>
+                        </div>
+                    `;
+                    exploitList.insertAdjacentHTML('beforeend', html);
+                });
+
+                socket.on('exploit_result', function(data) {
+                    const responseBox = document.getElementById(`response_${data.id}`);
+                    if (responseBox) {
+                        responseBox.classList.remove('hidden');
+                        responseBox.innerText = data.output;
                     }
                 });
 
@@ -338,9 +455,26 @@
                     if (data.status === 'found' && data.pdf) {
                         document.getElementById('resultArea').classList.remove('hidden');
                         document.getElementById('downloadLink').href = "/download/" + data.pdf;
+                        
+                        // Give Graph a final rotation spin when done
+                        if(Graph) {
+                            let angle = 0;
+                            setInterval(() => {
+                                Graph.cameraPosition({ x: 200 * Math.sin(angle), z: 200 * Math.cos(angle) });
+                                angle += Math.PI / 300;
+                            }, 30);
+                        }
                     }
                 });
             }
+        }
+
+        function fireExploit(exploitId) {
+            const payload = document.getElementById(`payload_${exploitId}`).value;
+            const responseBox = document.getElementById(`response_${exploitId}`);
+            responseBox.classList.remove('hidden');
+            responseBox.innerText = "[*] LAUNCHING PAYLOAD...\n[*] AWAITING SERVER RESPONSE...";
+            socket.emit('test_exploit', { id: exploitId, payload: payload });
         }
 
         function updateStats() {
@@ -360,25 +494,28 @@
 
         function startScan() {
             const url = document.getElementById('urlInput').value.trim();
-            
             if(!url) return alert("TARGET REQUIRED // ABORTING");
             
-            // --- NEW: STRICT URL VALIDATION ---
-            if (currentMode === 'code') {
-                if (!url.startsWith("https://github.com/")) {
-                    alert("ERROR: Code Auditor requires a valid GitHub Repository URL starting with 'https://github.com/'");
-                    return;
-                }
-            } else if (currentMode === 'web') {
-                if (url.startsWith("https://github.com/")) {
-                    alert("ERROR: You pasted a GitHub URL into the Web Scanner. Please switch to the 'CODE AUDITOR' tab above.");
-                    return;
-                }
+            if (currentMode === 'code' && !url.startsWith("https://github.com/")) {
+                return alert("ERROR: Code Auditor requires a valid GitHub Repository URL starting with 'https://github.com/'");
+            } else if (currentMode === 'web' && url.startsWith("https://github.com/")) {
+                return alert("ERROR: You pasted a GitHub URL into the Web Scanner. Please switch to the 'CODE AUDITOR' tab above.");
             }
             
             logBox.innerHTML = "";
-            totalVulns = 0; critVulns = 0; updateStats();
+            totalVulns = 0; critVulns = 0; exploitCounter = 0; updateStats();
             document.getElementById('resultArea').classList.add('hidden');
+            exploitLabContainer.classList.add('hidden');
+            exploitList.innerHTML = "";
+            
+            // 🔴 RESET 3D GRAPH
+            if (currentMode === 'web') {
+                mapContainer.classList.remove('hidden');
+                rootNodeId = url;
+                graphData = { nodes: [{ id: rootNodeId, group: 'root' }], links: [] };
+                if (!Graph) init3DGraph();
+                else Graph.graphData(graphData);
+            }
             
             const status = document.getElementById('statusIndicator');
             status.innerText = "PROTOCOL ACTIVE";

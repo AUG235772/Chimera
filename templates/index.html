@@ -8,13 +8,10 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    
     <script src="https://unpkg.com/3d-force-graph"></script>
-    
     <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
 
     <style>
-        /* GLOBAL THEME */
         :root {
             --neon-green: #00ff41;
             --neon-red: #ff003c;
@@ -35,81 +32,31 @@
             background-size: 20px 20px;
         }
 
-        /* NEON BOXES */
-        .neon-box {
-            border: 1px solid var(--neon-green);
-            box-shadow: 0 0 5px var(--neon-green), inset 0 0 10px rgba(0, 255, 65, 0.1);
-            background: var(--panel-bg);
-            position: relative;
-        }
-
-        /* MODE TABS */
-        .tab-btn {
-            background: rgba(0, 50, 0, 0.5);
-            color: #444;
-            border: 1px solid #333;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-        .tab-btn.active {
-            background: var(--neon-green);
-            color: #000;
-            border-color: var(--neon-green);
-            box-shadow: 0 0 15px var(--neon-green);
-        }
+        .neon-box { border: 1px solid var(--neon-green); box-shadow: 0 0 5px var(--neon-green), inset 0 0 10px rgba(0, 255, 65, 0.1); background: var(--panel-bg); position: relative; }
+        .tab-btn { background: rgba(0, 50, 0, 0.5); color: #444; border: 1px solid #333; cursor: pointer; transition: all 0.3s; }
+        .tab-btn.active { background: var(--neon-green); color: #000; border-color: var(--neon-green); box-shadow: 0 0 15px var(--neon-green); }
         
-        /* BLUE THEME FOR SAST MODE */
         body.sast-mode { color: var(--neon-blue); }
         .sast-mode .neon-box { border-color: var(--neon-blue); box-shadow: 0 0 5px var(--neon-blue); }
         .sast-mode .btn-cyber { border-color: var(--neon-blue); color: var(--neon-blue); text-shadow: 0 0 5px var(--neon-blue); }
         .sast-mode .btn-cyber:hover { background: var(--neon-blue); color: #000; box-shadow: 0 0 20px var(--neon-blue); }
         .sast-mode .tab-btn.active { background: var(--neon-blue); border-color: var(--neon-blue); box-shadow: 0 0 15px var(--neon-blue); }
 
-        /* SCROLLBAR */
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: #000; border-left: 1px solid #333; }
         ::-webkit-scrollbar-thumb { background: var(--neon-green); border: 1px solid #000; }
         .sast-mode ::-webkit-scrollbar-thumb { background: var(--neon-blue); }
 
-        /* BUTTONS */
-        .btn-cyber {
-            background: transparent; border: 1px solid var(--neon-green);
-            color: var(--neon-green); transition: all 0.2s ease;
-            text-transform: uppercase; letter-spacing: 2px; position: relative; overflow: hidden;
-            text-shadow: 0 0 5px var(--neon-green);
-        }
-        .btn-cyber:hover {
-            background: var(--neon-green); color: #000;
-            box-shadow: 0 0 20px var(--neon-green);
-            text-shadow: none;
-            cursor: pointer;
-        }
-
-        .btn-fire {
-            background: rgba(157, 0, 255, 0.1); border: 1px solid var(--neon-purple);
-            color: var(--neon-purple); transition: all 0.2s ease;
-            text-shadow: 0 0 5px var(--neon-purple);
-        }
-        .btn-fire:hover {
-            background: var(--neon-red); border-color: var(--neon-red); color: #fff;
-            box-shadow: 0 0 20px var(--neon-red); text-shadow: none; cursor: pointer;
-        }
+        .btn-cyber { background: transparent; border: 1px solid var(--neon-green); color: var(--neon-green); transition: all 0.2s ease; text-transform: uppercase; letter-spacing: 2px; position: relative; overflow: hidden; text-shadow: 0 0 5px var(--neon-green); }
+        .btn-cyber:hover { background: var(--neon-green); color: #000; box-shadow: 0 0 20px var(--neon-green); text-shadow: none; cursor: pointer; }
+        .btn-fire { background: rgba(157, 0, 255, 0.1); border: 1px solid var(--neon-purple); color: var(--neon-purple); transition: all 0.2s ease; text-shadow: 0 0 5px var(--neon-purple); }
+        .btn-fire:hover { background: var(--neon-red); border-color: var(--neon-red); color: #fff; box-shadow: 0 0 20px var(--neon-red); text-shadow: none; cursor: pointer; }
         
-        /* LOG TERMINAL */
         .log-terminal { font-family: 'Courier New', Courier, monospace; font-size: 13px; line-height: 1.5; }
         .pulse-text { animation: pulse-glow 2s infinite; }
         @keyframes pulse-glow { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 
-        .exploit-code {
-            font-family: 'Courier New', Courier, monospace;
-            background-color: #0a0a0a;
-            color: var(--neon-purple);
-            border: 1px solid #333;
-            width: 100%;
-            padding: 10px;
-            font-size: 12px;
-            resize: vertical;
-        }
+        .exploit-code { font-family: 'Courier New', Courier, monospace; background-color: #0a0a0a; color: var(--neon-purple); border: 1px solid #333; width: 100%; padding: 10px; font-size: 12px; resize: vertical; }
         .exploit-code:focus { outline: none; border-color: var(--neon-purple); box-shadow: 0 0 10px rgba(157, 0, 255, 0.2); }
         .response-box { font-family: 'Courier New', Courier, monospace; background-color: #000; color: #ccc; border: 1px dashed #444; padding: 10px; font-size: 12px; max-height: 200px; overflow-y: auto; white-space: pre-wrap; }
     </style>
@@ -193,8 +140,8 @@
                 <div class="absolute bottom-2 left-2 z-10 text-[10px] bg-black/80 p-3 border border-blue-900 rounded font-bold tracking-widest pointer-events-none">
                     <div class="text-[#fcee0a] mb-1">■ TARGET ROOT</div>
                     <div class="text-[#00f3ff] mb-1">■ SHADOW API</div>
-                    <div class="text-[#00ff41] mb-1">■ SPIDERED PATH</div>
-                    <div class="text-[#ff003c]">■ VULNERABILITY</div>
+                    <div class="text-[#00ff41] mb-1">■ VULNERABLE PATH</div>
+                    <div class="text-[#ff003c]">■ EXPLOIT DETECTED</div>
                 </div>
 
                 <div id="3d-graph" class="w-full h-full bg-[#020202] cursor-move"></div>
@@ -252,7 +199,7 @@
         const exploitList = document.getElementById('exploitList');
         const mapContainer = document.getElementById('mapContainer');
 
-        // 🔴 3D GRAPH VARIABLES & THROTTLER
+        // 🔴 3D GRAPH VARIABLES
         let graphData = { nodes: [], links: [] };
         let Graph = null;
         let rootNodeId = "TARGET";
@@ -278,11 +225,12 @@
                     if(node.group === 'vuln') return '#ff003c';  
                     return '#ffffff';
                 })
-                // 🔴 CYBERPUNK HOVER HUD
                 .nodeLabel(node => {
                     const colors = {root: '#fcee0a', api: '#00f3ff', spider: '#00ff41', vuln: '#ff003c'};
                     const color = colors[node.group] || '#ffffff';
-                    return `<div style="background: rgba(0,0,0,0.9); border: 1px solid ${color}; padding: 5px; font-family: 'Courier New', monospace; color: ${color}; box-shadow: 0 0 10px ${color};">${node.id}</div>`;
+                    // Use custom name or fallback to ID
+                    const labelText = node.name || node.id;
+                    return `<div style="background: rgba(0,0,0,0.9); border: 1px solid ${color}; padding: 5px; font-family: 'Courier New', monospace; color: ${color}; box-shadow: 0 0 10px ${color};">${labelText}</div>`;
                 })
                 .linkDirectionalParticles(2)
                 .linkDirectionalParticleWidth(1.5)
@@ -290,29 +238,36 @@
                 .linkColor(() => 'rgba(0, 255, 65, 0.2)');
 
             Graph.d3Force('charge').strength(-150);
-            
-            // Adjust canvas size
             Graph.width(mapContainer.clientWidth);
             Graph.height(400);
         }
 
-        function addGraphNode(id, group, parentId) {
+        // 🔴 FIXED: Dynamic node builder with explicit Display Names and Link Safety
+        function addGraphNode(id, group, parentId, displayName = null) {
             if (!Graph) return;
             
-            let displayId = id.replace(rootNodeId, "");
-            if (displayId === "" || displayId === "/") return;
-            displayId = displayId.length > 50 ? displayId.substring(0, 50) + '...' : displayId;
+            // Clean up the name for the HUD tooltip
+            if (!displayName) {
+                displayName = id;
+                if (id !== rootNodeId && id.includes(rootNodeId)) {
+                    displayName = id.replace(rootNodeId, "");
+                }
+                if (displayName === "") displayName = "/";
+                displayName = displayName.length > 50 ? displayName.substring(0, 50) + '...' : displayName;
+            }
 
-            if (!graphData.nodes.find(n => n.id === displayId)) {
-                graphData.nodes.push({ id: displayId, group: group });
-                if (parentId) {
-                    graphData.links.push({ source: parentId, target: displayId });
+            // Only add if ID doesn't already exist
+            if (!graphData.nodes.find(n => n.id === id)) {
+                graphData.nodes.push({ id: id, name: displayName, group: group });
+                
+                // Only create link if the parent node ACTUALLY exists in the graph!
+                if (parentId && graphData.nodes.find(n => n.id === parentId)) {
+                    graphData.links.push({ source: parentId, target: id });
                 }
                 graphUpdatePending = true; 
             }
         }
 
-        // 🔴 THROTTLER: Updates smoothly once per second. No more blinking or crashing!
         setInterval(() => {
             if (graphUpdatePending && Graph) {
                 Graph.graphData({ nodes: [...graphData.nodes], links: [...graphData.links] });
@@ -414,19 +369,17 @@
                     logBox.appendChild(div);
                     logBox.scrollTop = logBox.scrollHeight;
 
+                    // 🔴 FIXED: GRAPH INTERCEPTION LOGIC
                     if (currentMode === 'web') {
                         if(text.includes("[SHADOW API] Discovered hidden path:")) {
                             let path = text.split("path: ")[1].split(" ")[0]; 
-                            addGraphNode(path, 'api', rootNodeId);
-                        }
-                        if(text.includes("Spidering: ")) {
-                            let crawledUrl = text.split("Spidering: ")[1].trim();
-                            let cleanUrl = crawledUrl.replace(rootNodeId, "");
-                            if(cleanUrl.length > 2) addGraphNode(cleanUrl, 'spider', rootNodeId);
+                            let apiId = "api_" + path;
+                            addGraphNode(apiId, 'api', rootNodeId, path);
                         }
                         if(text.includes("ISSUE FOUND") || text.includes("NUCLEI:")) {
                             critVulns++; totalVulns++; updateStats();
                         }
+                        // Note: The broken 'Spidering: ' parser has been permanently deleted!
                     }
 
                     if(text.includes("Downloaded") && text.includes("alerts")) {
@@ -443,7 +396,15 @@
                     exploitLabContainer.classList.remove('hidden');
                     exploitCounter++;
                     
-                    if (currentMode === 'web') addGraphNode(data.type, 'vuln', rootNodeId);
+                    // 🔴 THE NEW EXPLOIT GRAPH TREE
+                    if (currentMode === 'web') {
+                        // 1. Spawns a GREEN node for the Vulnerable URL
+                        addGraphNode(data.url, 'spider', rootNodeId);
+                        
+                        // 2. Spawns a RED node for the Exploit, attached to the Green URL
+                        let vulnId = `vuln_${exploitCounter}_${data.type}`;
+                        addGraphNode(vulnId, 'vuln', data.url, data.type);
+                    }
                     
                     const exploitId = `exploit_${exploitCounter}`;
                     const html = `
@@ -532,8 +493,12 @@
             
             if (currentMode === 'web') {
                 mapContainer.classList.remove('hidden');
+                // Format the root node so it looks clean in the tooltip
+                let rootName = url.replace("https://", "").replace("http://", "");
+                if (rootName.endsWith("/")) rootName = rootName.slice(0, -1);
                 rootNodeId = url;
-                graphData = { nodes: [{ id: rootNodeId, group: 'root' }], links: [] };
+                
+                graphData = { nodes: [{ id: rootNodeId, name: rootName, group: 'root' }], links: [] };
                 
                 setTimeout(() => {
                     if (!Graph) {

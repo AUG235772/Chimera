@@ -203,6 +203,7 @@
         let graphData = { nodes: [], links: [] };
         let Graph = null;
         let rootNodeId = "TARGET";
+        let baseDomain = ""; // Helps us extract subdomains and paths cleanly
         let graphUpdatePending = false; 
 
         function init3DGraph() {
@@ -228,7 +229,6 @@
                 .nodeLabel(node => {
                     const colors = {root: '#fcee0a', api: '#00f3ff', spider: '#00ff41', vuln: '#ff003c'};
                     const color = colors[node.group] || '#ffffff';
-                    // Use custom name or fallback to ID
                     const labelText = node.name || node.id;
                     return `<div style="background: rgba(0,0,0,0.9); border: 1px solid ${color}; padding: 5px; font-family: 'Courier New', monospace; color: ${color}; box-shadow: 0 0 10px ${color};">${labelText}</div>`;
                 })
@@ -242,11 +242,9 @@
             Graph.height(400);
         }
 
-        // 🔴 FIXED: Dynamic node builder with explicit Display Names and Link Safety
         function addGraphNode(id, group, parentId, displayName = null) {
             if (!Graph) return;
             
-            // Clean up the name for the HUD tooltip
             if (!displayName) {
                 displayName = id;
                 if (id !== rootNodeId && id.includes(rootNodeId)) {
@@ -256,13 +254,14 @@
                 displayName = displayName.length > 50 ? displayName.substring(0, 50) + '...' : displayName;
             }
 
-            // Only add if ID doesn't already exist
             if (!graphData.nodes.find(n => n.id === id)) {
                 graphData.nodes.push({ id: id, name: displayName, group: group });
                 
-                // Only create link if the parent node ACTUALLY exists in the graph!
                 if (parentId && graphData.nodes.find(n => n.id === parentId)) {
                     graphData.links.push({ source: parentId, target: id });
+                } else if (parentId === rootNodeId && graphData.nodes.length > 0) {
+                    // Failsafe: connect to root even if ID matching is slightly off
+                    graphData.links.push({ source: graphData.nodes[0].id, target: id });
                 }
                 graphUpdatePending = true; 
             }
@@ -369,17 +368,51 @@
                     logBox.appendChild(div);
                     logBox.scrollTop = logBox.scrollHeight;
 
-                    // 🔴 FIXED: GRAPH INTERCEPTION LOGIC
-                    if (currentMode === 'web') {
+                    // 🔴 THE NEW UNIVERSAL GRAPH EXTRACTOR 
+                    if (currentMode === 'web' && baseDomain !== "") {
+                        
+                        // 1. Explicit Shadow API extraction
                         if(text.includes("[SHADOW API] Discovered hidden path:")) {
                             let path = text.split("path: ")[1].split(" ")[0]; 
                             let apiId = "api_" + path;
                             addGraphNode(apiId, 'api', rootNodeId, path);
                         }
+                        
+                        // 2. Explicit Subdomain extraction
+                        if (text.toLowerCase().includes("subdomain:")) {
+                            let words = text.split(" ");
+                            words.forEach(w => {
+                                if (w.includes(baseDomain) && w !== baseDomain) {
+                                    let sub = w.replace(/[\.\,\)\]\'\"]+$/, "");
+                                    addGraphNode("sub_" + sub, 'api', rootNodeId, sub);
+                                }
+                            });
+                        }
+
+                        // 3. Universal URL Catcher (Extracts ANY spidered/tested url from ANY log)
+                        const urlRegex = /(https?:\/\/[^\s]+)/g;
+                        let foundUrls = text.match(urlRegex);
+                        if (foundUrls) {
+                            foundUrls.forEach(rawU => {
+                                // Clean trailing punctuation (like the '...' that broke it)
+                                let u = rawU.replace(/[\.\,\)\]\'\"]+$/, ""); 
+                                
+                                // Only graph it if it belongs to our target but IS NOT just the root domain
+                                if (u.includes(baseDomain) && u !== rootNodeId && u !== rootNodeId + "/") {
+                                    let displayPath = u.substring(u.indexOf(baseDomain) + baseDomain.length);
+                                    if (displayPath === "") displayPath = "/";
+                                    
+                                    // Ignore overly long base64 strings or junk
+                                    if (displayPath.length > 1 && displayPath.length < 60) {
+                                        addGraphNode(u, 'spider', rootNodeId, displayPath);
+                                    }
+                                }
+                            });
+                        }
+
                         if(text.includes("ISSUE FOUND") || text.includes("NUCLEI:")) {
                             critVulns++; totalVulns++; updateStats();
                         }
-                        // Note: The broken 'Spidering: ' parser has been permanently deleted!
                     }
 
                     if(text.includes("Downloaded") && text.includes("alerts")) {
@@ -396,12 +429,8 @@
                     exploitLabContainer.classList.remove('hidden');
                     exploitCounter++;
                     
-                    // 🔴 THE NEW EXPLOIT GRAPH TREE
                     if (currentMode === 'web') {
-                        // 1. Spawns a GREEN node for the Vulnerable URL
                         addGraphNode(data.url, 'spider', rootNodeId);
-                        
-                        // 2. Spawns a RED node for the Exploit, attached to the Green URL
                         let vulnId = `vuln_${exploitCounter}_${data.type}`;
                         addGraphNode(vulnId, 'vuln', data.url, data.type);
                     }
@@ -493,10 +522,11 @@
             
             if (currentMode === 'web') {
                 mapContainer.classList.remove('hidden');
-                // Format the root node so it looks clean in the tooltip
-                let rootName = url.replace("https://", "").replace("http://", "");
-                if (rootName.endsWith("/")) rootName = rootName.slice(0, -1);
+                
+                // 🔴 FIXED: Set the base domain for robust URL extraction
                 rootNodeId = url;
+                baseDomain = url.replace(/^https?:\/\//, '').replace(/\/$/, '');
+                let rootName = baseDomain;
                 
                 graphData = { nodes: [{ id: rootNodeId, name: rootName, group: 'root' }], links: [] };
                 

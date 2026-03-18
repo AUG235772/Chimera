@@ -203,7 +203,7 @@
         let graphData = { nodes: [], links: [] };
         let Graph = null;
         let rootNodeId = "TARGET";
-        let baseDomain = ""; // Helps us extract subdomains and paths cleanly
+        let baseDomain = ""; 
         let graphUpdatePending = false; 
 
         function init3DGraph() {
@@ -251,6 +251,7 @@
                     displayName = id.replace(rootNodeId, "");
                 }
                 if (displayName === "") displayName = "/";
+                // FIXED TYPO HERE (was displayId instead of displayName)
                 displayName = displayName.length > 50 ? displayName.substring(0, 50) + '...' : displayName;
             }
 
@@ -260,16 +261,23 @@
                 if (parentId && graphData.nodes.find(n => n.id === parentId)) {
                     graphData.links.push({ source: parentId, target: id });
                 } else if (parentId === rootNodeId && graphData.nodes.length > 0) {
-                    // Failsafe: connect to root even if ID matching is slightly off
                     graphData.links.push({ source: graphData.nodes[0].id, target: id });
                 }
                 graphUpdatePending = true; 
             }
         }
 
+        // 🔴 FIXED: DEEP COPY THROTTLER (Prevents the D3 'vx' Crash)
         setInterval(() => {
             if (graphUpdatePending && Graph) {
-                Graph.graphData({ nodes: [...graphData.nodes], links: [...graphData.links] });
+                // We map fresh copies of the objects so D3's physics engine doesn't corrupt our state array
+                const safeNodes = graphData.nodes.map(n => Object.assign({}, n));
+                const safeLinks = graphData.links.map(l => ({
+                    source: typeof l.source === 'object' ? l.source.id : l.source,
+                    target: typeof l.target === 'object' ? l.target.id : l.target
+                }));
+                
+                Graph.graphData({ nodes: safeNodes, links: safeLinks });
                 graphUpdatePending = false;
             }
         }, 1000);
@@ -371,14 +379,12 @@
                     // 🔴 THE NEW UNIVERSAL GRAPH EXTRACTOR 
                     if (currentMode === 'web' && baseDomain !== "") {
                         
-                        // 1. Explicit Shadow API extraction
                         if(text.includes("[SHADOW API] Discovered hidden path:")) {
                             let path = text.split("path: ")[1].split(" ")[0]; 
                             let apiId = "api_" + path;
                             addGraphNode(apiId, 'api', rootNodeId, path);
                         }
                         
-                        // 2. Explicit Subdomain extraction
                         if (text.toLowerCase().includes("subdomain:")) {
                             let words = text.split(" ");
                             words.forEach(w => {
@@ -389,20 +395,15 @@
                             });
                         }
 
-                        // 3. Universal URL Catcher (Extracts ANY spidered/tested url from ANY log)
                         const urlRegex = /(https?:\/\/[^\s]+)/g;
                         let foundUrls = text.match(urlRegex);
                         if (foundUrls) {
                             foundUrls.forEach(rawU => {
-                                // Clean trailing punctuation (like the '...' that broke it)
                                 let u = rawU.replace(/[\.\,\)\]\'\"]+$/, ""); 
-                                
-                                // Only graph it if it belongs to our target but IS NOT just the root domain
                                 if (u.includes(baseDomain) && u !== rootNodeId && u !== rootNodeId + "/") {
                                     let displayPath = u.substring(u.indexOf(baseDomain) + baseDomain.length);
                                     if (displayPath === "") displayPath = "/";
                                     
-                                    // Ignore overly long base64 strings or junk
                                     if (displayPath.length > 1 && displayPath.length < 60) {
                                         addGraphNode(u, 'spider', rootNodeId, displayPath);
                                     }
@@ -523,7 +524,6 @@
             if (currentMode === 'web') {
                 mapContainer.classList.remove('hidden');
                 
-                // 🔴 FIXED: Set the base domain for robust URL extraction
                 rootNodeId = url;
                 baseDomain = url.replace(/^https?:\/\//, '').replace(/\/$/, '');
                 let rootName = baseDomain;

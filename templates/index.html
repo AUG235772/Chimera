@@ -10,8 +10,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <script src="https://unpkg.com/3d-force-graph"></script>
-    <script src="https://unpkg.com/three"></script>
-    <script src="https://unpkg.com/three-spritetext"></script>
     
     <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
 
@@ -226,7 +224,7 @@
                     <span class="text-xs text-purple-400 animate-pulse">LIVE</span>
                 </div>
                 <div id="exploitList" class="p-4 space-y-4 bg-black/80 max-h-[500px] overflow-y-auto">
-                    </div>
+                </div>
             </div>
 
             <div id="resultArea" class="hidden neon-box p-6 bg-black/50 flex justify-between items-center border-l-4 border-l-current animate-pulse">
@@ -254,19 +252,11 @@
         const exploitList = document.getElementById('exploitList');
         const mapContainer = document.getElementById('mapContainer');
 
-        // 🔴 3D GRAPH VARIABLES
+        // 🔴 3D GRAPH VARIABLES & THROTTLER
         let graphData = { nodes: [], links: [] };
         let Graph = null;
         let rootNodeId = "TARGET";
-        let graphUpdatePending = false; // Prevents the blinking crash
-
-        function getNodeColor(group) {
-            if(group === 'root') return '#fcee0a';
-            if(group === 'api') return '#00f3ff';
-            if(group === 'spider') return '#00ff41';
-            if(group === 'vuln') return '#ff003c';
-            return '#ffffff';
-        }
+        let graphUpdatePending = false; 
 
         function init3DGraph() {
             const graphElem = document.getElementById('3d-graph');
@@ -275,51 +265,56 @@
             Graph = ForceGraph3D()(graphElem)
                 .backgroundColor('#020202')
                 .showNavInfo(false)
-                // 🔴 NEW: RENDER TEXT INSTEAD OF DOTS
-                .nodeThreeObject(node => {
-                    const sprite = new SpriteText(node.id);
-                    sprite.color = getNodeColor(node.group);
-                    sprite.textHeight = node.group === 'root' ? 6 : 3; // Make root bigger
-                    sprite.fontWeight = 'bold';
-                    sprite.fontFace = 'Courier New';
-                    return sprite;
+                .nodeRelSize(5)
+                .nodeVal(node => {
+                    if(node.group === 'root') return 20; 
+                    if(node.group === 'vuln') return 15; 
+                    return 5;                            
+                })
+                .nodeColor(node => {
+                    if(node.group === 'root') return '#fcee0a';  
+                    if(node.group === 'api') return '#00f3ff';   
+                    if(node.group === 'spider') return '#00ff41';
+                    if(node.group === 'vuln') return '#ff003c';  
+                    return '#ffffff';
+                })
+                // 🔴 CYBERPUNK HOVER HUD
+                .nodeLabel(node => {
+                    const colors = {root: '#fcee0a', api: '#00f3ff', spider: '#00ff41', vuln: '#ff003c'};
+                    const color = colors[node.group] || '#ffffff';
+                    return `<div style="background: rgba(0,0,0,0.9); border: 1px solid ${color}; padding: 5px; font-family: 'Courier New', monospace; color: ${color}; box-shadow: 0 0 10px ${color};">${node.id}</div>`;
                 })
                 .linkDirectionalParticles(2)
-                .linkDirectionalParticleWidth(1)
+                .linkDirectionalParticleWidth(1.5)
                 .linkDirectionalParticleSpeed(0.005)
-                .linkColor(() => '#333333');
+                .linkColor(() => 'rgba(0, 255, 65, 0.2)');
 
-            // 🔴 NEW: Adjust physics so nodes push away from each other instead of clumping
             Graph.d3Force('charge').strength(-150);
+            
+            // Adjust canvas size
+            Graph.width(mapContainer.clientWidth);
+            Graph.height(400);
         }
 
         function addGraphNode(id, group, parentId) {
             if (!Graph) return;
             
-            // Clean up the URL so it's readable on screen
-            let displayId = id;
-            if (displayId.includes(rootNodeId)) {
-                displayId = displayId.replace(rootNodeId, "");
-            }
-            if (displayId === "" || displayId === "/") return; // Skip empty nodes
-            
-            displayId = displayId.length > 30 ? displayId.substring(0, 30) + '...' : displayId;
+            let displayId = id.replace(rootNodeId, "");
+            if (displayId === "" || displayId === "/") return;
+            displayId = displayId.length > 50 ? displayId.substring(0, 50) + '...' : displayId;
 
-            // Prevent duplicates
             if (!graphData.nodes.find(n => n.id === displayId)) {
                 graphData.nodes.push({ id: displayId, group: group });
                 if (parentId) {
                     graphData.links.push({ source: parentId, target: displayId });
                 }
-                // Flag that we need an update, but DON'T update immediately!
-                graphUpdatePending = true;
+                graphUpdatePending = true; 
             }
         }
 
-        // 🔴 NEW: Render Loop (Updates smoothly once per second, stopping the blink)
+        // 🔴 THROTTLER: Updates smoothly once per second. No more blinking or crashing!
         setInterval(() => {
             if (graphUpdatePending && Graph) {
-                // By passing a new object array, the engine seamlessly animates the new nodes in
                 Graph.graphData({ nodes: [...graphData.nodes], links: [...graphData.links] });
                 graphUpdatePending = false;
             }
@@ -419,22 +414,17 @@
                     logBox.appendChild(div);
                     logBox.scrollTop = logBox.scrollHeight;
 
-                    // --- 🔴 GRAPH INTERCEPTION LOGIC ---
                     if (currentMode === 'web') {
-                        // Extract discovered API paths
                         if(text.includes("[SHADOW API] Discovered hidden path:")) {
                             let path = text.split("path: ")[1].split(" ")[0]; 
                             addGraphNode(path, 'api', rootNodeId);
                         }
-                        // Extract Spidered URLs
                         if(text.includes("Spidering: ")) {
                             let crawledUrl = text.split("Spidering: ")[1].trim();
-                            // Keep node names clean
                             let cleanUrl = crawledUrl.replace(rootNodeId, "");
                             if(cleanUrl.length > 2) addGraphNode(cleanUrl, 'spider', rootNodeId);
                         }
-                        // Extract general vulnerabilities
-                        if(text.includes("ISSUE FOUND")) {
+                        if(text.includes("ISSUE FOUND") || text.includes("NUCLEI:")) {
                             critVulns++; totalVulns++; updateStats();
                         }
                     }
@@ -453,7 +443,6 @@
                     exploitLabContainer.classList.remove('hidden');
                     exploitCounter++;
                     
-                    // Add Vuln to 3D Graph
                     if (currentMode === 'web') addGraphNode(data.type, 'vuln', rootNodeId);
                     
                     const exploitId = `exploit_${exploitCounter}`;
@@ -490,7 +479,6 @@
                         document.getElementById('resultArea').classList.remove('hidden');
                         document.getElementById('downloadLink').href = "/download/" + data.pdf;
                         
-                        // Give Graph a final rotation spin when done
                         if(Graph) {
                             let angle = 0;
                             setInterval(() => {
@@ -542,23 +530,20 @@
             exploitLabContainer.classList.add('hidden');
             exploitList.innerHTML = "";
             
-            // 🔴 RESET 3D GRAPH
             if (currentMode === 'web') {
                 mapContainer.classList.remove('hidden');
                 rootNodeId = url;
                 graphData = { nodes: [{ id: rootNodeId, group: 'root' }], links: [] };
                 
-                // We must wait 100ms for the CSS 'hidden' class to disappear so WebGL knows the canvas size!
                 setTimeout(() => {
                     if (!Graph) {
                         init3DGraph();
                     } else {
-                        // Force resize and update
                         Graph.width(document.getElementById('mapContainer').clientWidth);
-                        Graph.height(350);
+                        Graph.height(400);
                         Graph.graphData(graphData);
                     }
-                }, 100);
+                }, 150);
             }
             
             const status = document.getElementById('statusIndicator');
